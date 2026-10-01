@@ -29,5 +29,7 @@ public class ExamScore extends BaseEntity {
     private LocalDateTime gradedAt;
     /** RECORDED 已录入 / REVIEWING 复核中 */
     private String status;
+    /** 成绩是否有效：缺考裁定生效时由裁定模块回写；统计与合格名单只认有效成绩。 */
+    private Boolean valid;
     private String remark;
 }

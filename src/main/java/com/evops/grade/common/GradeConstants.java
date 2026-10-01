@@ -38,6 +38,8 @@ public final class GradeConstants {
     // 通知类型 / 状态
     public static final String NOTIFY_REVIEW_RESULT = "REVIEW_RESULT";
     public static final String NOTIFY_REVIEW_CLOSED = "REVIEW_CLOSED";
+    /** 缺考裁定结论通知（裁定确认生效即通知本人）。 */
+    public static final String NOTIFY_ABSENCE_RULING = "ABSENCE_RULING";
     public static final String NOTIFY_NEW = "NEW";
     public static final String NOTIFY_READ = "READ";
 

@@ -1,5 +1,11 @@
 package com.evops.exam.mapper;
 
+import com.evops.absence.entity.AbsenceMark;
+import com.evops.absence.entity.AbsenceMarkVersion;
+import com.evops.absence.entity.AbsenceStat;
+import com.evops.absence.entity.ExamineeCheckin;
+import com.evops.absence.entity.ScoreSnapshot;
+import com.evops.absence.entity.ViolationRecord;
 import com.evops.exam.entity.AdmissionTicket;
 import com.evops.exam.entity.ExamBatch;
 import com.evops.exam.entity.ExamRoom;
@@ -192,9 +198,10 @@ public interface RestoreMapper {
     void insertGradeRuleVersion(GradeRuleVersion v);
 
     @Insert("INSERT INTO t_exam_score (id, batch_id, registration_id, reg_no, name, paper_score, final_score, grade, "
-            + "rule_version_id, rule_version_no, graded_at, status, remark, create_by, create_time, update_by, "
+            + "rule_version_id, rule_version_no, graded_at, status, valid, remark, create_by, create_time, update_by, "
             + "update_time) VALUES (#{id},#{batchId},#{registrationId},#{regNo},#{name},#{paperScore},"
-            + "#{finalScore},#{grade},#{ruleVersionId},#{ruleVersionNo},#{gradedAt},#{status},#{remark},"
+            + "#{finalScore},#{grade},#{ruleVersionId},#{ruleVersionNo},#{gradedAt},#{status},"
+            + "COALESCE(#{valid},TRUE),#{remark},"
             + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
     void insertScore(ExamScore s);
 
@@ -598,4 +605,113 @@ public interface RestoreMapper {
 
     @Update("ALTER TABLE t_vault_alert ALTER COLUMN id RESTART WITH ${value}")
     void restartVaultAlert(@Param("value") long value);
+
+    // ============ absence-1：缺考裁定与成绩快照 ============
+    @Delete("DELETE FROM t_examinee_checkin")
+    void clearExamineeCheckins();
+
+    @Delete("DELETE FROM t_violation_record")
+    void clearViolationRecords();
+
+    @Delete("DELETE FROM t_absence_mark")
+    void clearAbsenceMarks();
+
+    @Delete("DELETE FROM t_absence_mark_version")
+    void clearAbsenceMarkVersions();
+
+    @Delete("DELETE FROM t_score_snapshot")
+    void clearScoreSnapshots();
+
+    @Delete("DELETE FROM t_absence_stat")
+    void clearAbsenceStats();
+
+    @Insert("INSERT INTO t_examinee_checkin (id, batch_id, registration_id, reg_no, name, check_in_at, "
+            + "source, status, reason, reviewer, reviewed_at, review_comment, operator, remark, "
+            + "create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{registrationId},#{regNo},#{name},#{checkInAt},"
+            + "#{source},#{status},#{reason},#{reviewer},#{reviewedAt},#{reviewComment},#{operator},#{remark},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertExamineeCheckin(ExamineeCheckin c);
+
+    @Insert("INSERT INTO t_violation_record (id, batch_id, registration_id, reg_no, name, violation_type, "
+            + "description, occurred_at, operator, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{registrationId},#{regNo},#{name},#{violationType},"
+            + "#{description},#{occurredAt},#{operator},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertViolationRecord(ViolationRecord v);
+
+    @Insert("INSERT INTO t_absence_mark (id, mark_no, batch_id, registration_id, reg_no, name, mark_type, "
+            + "source, current_version, status, score_valid, invalid_reason, next_arrangement, next_batch_id, "
+            + "reviewer, reviewed_at, review_comment, operator, remark, "
+            + "create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{markNo},#{batchId},#{registrationId},#{regNo},#{name},#{markType},"
+            + "#{source},#{currentVersion},#{status},#{scoreValid},#{invalidReason},#{nextArrangement},"
+            + "#{nextBatchId},#{reviewer},#{reviewedAt},#{reviewComment},#{operator},#{remark},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceMark(AbsenceMark m);
+
+    @Insert("INSERT INTO t_absence_mark_version (id, mark_id, version_no, status, mark_type, score_valid, "
+            + "invalid_reason, next_arrangement, next_batch_id, change_type, change_reason, reviewer, operator, "
+            + "changed_at, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{markId},#{versionNo},#{status},#{markType},#{scoreValid},"
+            + "#{invalidReason},#{nextArrangement},#{nextBatchId},#{changeType},#{changeReason},#{reviewer},"
+            + "#{operator},#{changedAt},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceMarkVersion(AbsenceMarkVersion v);
+
+    @Insert("INSERT INTO t_score_snapshot (id, batch_id, registration_id, reg_no, name, score_id, paper_score, "
+            + "grade, rule_version_no, valid_before, valid_after, mark_id, mark_no, mark_type, change_reason, "
+            + "operator, snapshotted_at, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{registrationId},#{regNo},#{name},#{scoreId},#{paperScore},"
+            + "#{grade},#{ruleVersionNo},#{validBefore},#{validAfter},#{markId},#{markNo},#{markType},"
+            + "#{changeReason},#{operator},#{snapshottedAt},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertScoreSnapshot(ScoreSnapshot s);
+
+    @Insert("INSERT INTO t_absence_stat (id, batch_id, generation, total_registrations, checked_in_count, "
+            + "supplement_pending_count, mark_pending_count, absent_count, abandoned_count, violation_count, "
+            + "score_valid_count, score_invalid_count, pass_list_count, grade_summary, trigger_reason, operator, "
+            + "computed_at, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{generation},#{totalRegistrations},#{checkedInCount},"
+            + "#{supplementPendingCount},#{markPendingCount},#{absentCount},#{abandonedCount},#{violationCount},"
+            + "#{scoreValidCount},#{scoreInvalidCount},#{passListCount},#{gradeSummary},#{triggerReason},"
+            + "#{operator},#{computedAt},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceStat(AbsenceStat s);
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_examinee_checkin")
+    long maxExamineeCheckinId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_violation_record")
+    long maxViolationRecordId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_mark")
+    long maxAbsenceMarkId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_mark_version")
+    long maxAbsenceMarkVersionId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_score_snapshot")
+    long maxScoreSnapshotId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_stat")
+    long maxAbsenceStatId();
+
+    @Update("ALTER TABLE t_examinee_checkin ALTER COLUMN id RESTART WITH ${value}")
+    void restartExamineeCheckin(@Param("value") long value);
+
+    @Update("ALTER TABLE t_violation_record ALTER COLUMN id RESTART WITH ${value}")
+    void restartViolationRecord(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_mark ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceMark(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_mark_version ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceMarkVersion(@Param("value") long value);
+
+    @Update("ALTER TABLE t_score_snapshot ALTER COLUMN id RESTART WITH ${value}")
+    void restartScoreSnapshot(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_stat ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceStat(@Param("value") long value);
 }

@@ -1,6 +1,7 @@
 package com.evops.grade.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.evops.absence.service.AbsenceMarkService;
 import com.evops.common.BusinessException;
 import com.evops.common.OperatorHolder;
 import com.evops.exam.entity.ExamBatch;
@@ -42,17 +43,20 @@ public class ScoreService {
     private final ExamBatchService batchService;
     private final RegistrationService registrationService;
     private final GradeRuleService ruleService;
+    private final AbsenceMarkService absenceMarkService;
 
     public ScoreService(ExamScoreMapper scoreMapper,
                         ScoreChangeLogMapper changeLogMapper,
                         ExamBatchService batchService,
                         RegistrationService registrationService,
-                        GradeRuleService ruleService) {
+                        GradeRuleService ruleService,
+                        AbsenceMarkService absenceMarkService) {
         this.scoreMapper = scoreMapper;
         this.changeLogMapper = changeLogMapper;
         this.batchService = batchService;
         this.registrationService = registrationService;
         this.ruleService = ruleService;
+        this.absenceMarkService = absenceMarkService;
     }
 
     // ---------- 批量录入预检 ----------
@@ -95,6 +99,9 @@ public class ScoreService {
                     } else {
                         grade = ruleService.gradeOf(rule.version, s);
                         note = "新增成绩，定级：" + grade + "（规则版本 " + rule.version.getVersionNo() + "）";
+                        if (absenceMarkService.isInvalidated(reg.getId())) {
+                            note += "；该学员有生效的无效化裁定，成绩将记为无效";
+                        }
                         ok = true;
                     }
                 }
@@ -171,6 +178,8 @@ public class ScoreService {
             score.setRuleVersionNo(version.getVersionNo());
             score.setGradedAt(now);
             score.setStatus(GradeConstants.SCORE_RECORDED);
+            // 已有生效的无效化裁定（缺考/弃考/违纪）时，成绩落库即无效，与裁定口径一致
+            score.setValid(!absenceMarkService.isInvalidated(reg.getId()));
             score.setRemark(in.getRemark());
             toInsert.add(score);
         }

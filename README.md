@@ -231,3 +231,48 @@
 - 历史既成事实：落库即 **CONFIRMED**（版本 IMPORT，单版生效），卷箱位置按纸面原样记录；异常时段同样自动标记并告警保卫。
 
 > 新表 `t_vault_person / t_vault_box / t_vault_access / t_vault_access_version / t_vault_box_move / t_vault_access_note / t_vault_alert / t_vault_config` 已纳入工作区快照与回退；schema 版本号 `vault-1`。
+
+## 缺考裁定与成绩快照工作区（absence-1）
+
+针对"同一个缺考、两个窗口两种答复"的投诉：缺考裁定收口到 evops-base 单一权威来源——**按签到和违纪记录自动标缺考 → 双人复核出最终裁定 → 裁定决定成绩有没有效 → 有效进合格名单、无效写原因衔接下次安排 → 统计只认最终裁定，裁定有变更就重算**。缺考标记分**模块（主表）/ 版本（只追加）/ 状态（当前版本）**三段，与聘任、出入登记同一套版本模式。
+
+### 28. 考生签到（现场签到即生效；补录走审批）
+
+- `POST /api/absence/checkins`：`{batchId, regNo, checkInAt?, remark?}` 现场签到，登记即生效（CONFIRMED）；一人一批次一条生效签到（`CHECKIN_EXISTS`）。
+- `POST /api/absence/checkins/supplement`：`{batchId, regNo, checkInAt, reason}` 补录申请，落库 **PENDING 待审批**，不生效；已有生效签到或待审批申请时拒收。
+- `POST /api/absence/checkins/{id}/approve`：`{approved, comment?}` 审批——审批人取 `X-Operator`，**须非补录提交人**（`SUPPLEMENT_SELF_APPROVE`）；批准才 CONFIRMED 生效，驳回必须写意见（REJECTED 永不生效）。批准生效前再校一次是否已有生效签到。
+- **补录批准的连锁**：对该生已生效的缺考（ABSENT）无效裁定**自动发起变更**（回到待复核，拟恢复成绩有效，仍须双人复核确认）。
+- `GET /api/absence/checkins?batchId=&status=&regNo=`、`GET /api/absence/checkins/{id}`。
+
+### 29. 违纪记录（自动标缺考的输入）
+
+- `POST /api/absence/violations`：`{batchId, regNo, violationType, description?, occurredAt?}` 直接登记；类型 `CHEAT 作弊 / IMPERSONATE 替考 / PROHIBITED 携带违禁品 / DISORDER 扰乱秩序 / OTHER 其他`。
+- `GET /api/absence/violations?batchId=&regNo=`。
+
+### 30. 缺考标记模块（自动扫描 + 手动标记，登记即待复核）
+
+- `POST /api/absence/scan/preview` → `POST /api/absence/scan`：`{batchId}` 两步扫描——名册中**无生效签到**的自动拟标 `ABSENT 缺考`、**有违纪记录**的自动拟标 `VIOLATION 违纪`，均落 PENDING；已有在办/生效同类型标记的逐条跳过（幂等，重复扫描安全）。
+- `POST /api/absence/marks`：`{batchId, regNo, markType, reason, nextArrangement?, nextBatchId?}` 手动标记——**弃考（ABANDONED）走这里**；缺考/弃考/违纪三类分清（`markType=ABSENT/ABANDONED/VIOLATION`）。
+- 裁定号 `QK + 批次编码 + 4 位流水`；**一人一裁定**：同一学员仅一条在办/生效裁定（不限类型，`MARK_EXISTS`），要调整走复核或变更，从根上杜绝"两个窗口两种答复"。
+
+### 31. 双人复核与最终裁定（结论决定成绩有效性）
+
+- `POST /api/absence/marks/{id}/review`：`{approved, comment?, markType?, scoreValid?, invalidReason?, nextArrangement?, nextBatchId?}`——复核人取 `X-Operator`，**须非标记经办人**（`REVIEWER_SAME_AS_OPERATOR`）；可按需修正类型与拟定结论；驳回必须写意见。
+- **确认生效（CONFIRMED 即最终裁定）**，同一事务内：回写成绩 `t_exam_score.valid` → 逐人逐笔写**成绩快照**（`t_score_snapshot`，前后状态只追加）→ **重算批次统计** → 站内通知本人（`ABSENCE_RULING`）。
+- 结论为成绩无效时**必须写明原因并衔接下次安排**（`SCORE_INVALID_DETAIL_REQUIRED`）；确认缺考无效前若该生已有生效签到则拒收（`CHECKIN_EXISTS`，两个窗口同一口径）。
+- **驳回**：新标记驳回即终结（REJECTED 永不生效）；变更轮驳回自动**恢复原裁定结论**（版本留痕）。
+
+### 32. 变更裁定（已生效裁定回到待复核）
+
+- `POST /api/absence/marks/{id}/change`：`{scoreValid, markType?, invalidReason?, nextArrangement?, nextBatchId?, reason}`——仅 CONFIRMED 可变更；可一并纠正类型（缺考/弃考分清）；变更回到 PENDING 再走双人复核，确认后成绩有效性翻转、写快照、**重算统计**、通知本人。
+- `GET /api/absence/marks?batchId=&status=&markType=`、`GET /api/absence/marks/{id}`、`GET /api/absence/marks/{id}/versions`（版本链全程留痕）。
+
+### 33. 合格名单 / 统计 / 成绩快照
+
+- `GET /api/absence/pass-list?batchId=`：**成绩有效即进名单**（无生效的无效化裁定），每行带等级与规则版本，按等级汇总计数；合不合格由等级规则表达，裁定只管有效/无效。
+- `GET /api/absence/stats?batchId=`：批次统计——报名/签到/补录待审/待复核标记/**缺考/弃考/违纪分类型计数**/成绩有效无效/名单人数/等级分布；**只认最终裁定**（每个标记最新一条 CONFIRMED 版本），每批次一行当前值，`generation` 随重算递增。
+- `POST /api/absence/stats/recompute`：手动重算（平时由裁定确认、签到生效、补录批准自动重算）。
+- `GET /api/absence/score-snapshots?batchId=&regNo=`：成绩快照——每笔裁定确认时该生成绩的前后状态（分数/等级/规则版本/有效标记 before→after、关联裁定号），只追加，两个窗口查同一份。
+- 通知：`GET /api/notifications?regNo=` 可查裁定结论通知（与成绩复核通知同一处）。
+
+> 新表 `t_examinee_checkin / t_violation_record / t_absence_mark / t_absence_mark_version / t_score_snapshot / t_absence_stat` 已纳入工作区快照与回退；`t_exam_score` 加列 `valid`（裁定生效回写，成绩导入时若已有生效无效裁定则落库即无效）；schema 版本号 `absence-1`。
