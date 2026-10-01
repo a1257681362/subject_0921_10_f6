@@ -34,6 +34,12 @@ import com.evops.grade.entity.GradeRuleVersion;
 import com.evops.grade.entity.ScoreChangeLog;
 import com.evops.grade.entity.ScoreNotification;
 import com.evops.grade.entity.ScoreReview;
+import com.evops.absence.entity.AbsenceNotification;
+import com.evops.absence.entity.AbsenceRuling;
+import com.evops.absence.entity.AbsenceRulingTrace;
+import com.evops.absence.entity.AbsenceRulingVersion;
+import com.evops.absence.entity.AttendanceRecord;
+import com.evops.absence.entity.DisciplineRecord;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -598,4 +604,119 @@ public interface RestoreMapper {
 
     @Update("ALTER TABLE t_vault_alert ALTER COLUMN id RESTART WITH ${value}")
     void restartVaultAlert(@Param("value") long value);
+
+    // ============ absence-1：缺考裁定与成绩快照 ============
+    @Delete("DELETE FROM t_absence_notification")
+    void clearAbsenceNotifications();
+
+    @Delete("DELETE FROM t_absence_ruling_trace")
+    void clearAbsenceTraces();
+
+    @Delete("DELETE FROM t_absence_ruling_version")
+    void clearAbsenceVersions();
+
+    @Delete("DELETE FROM t_absence_ruling")
+    void clearAbsenceRulings();
+
+    @Delete("DELETE FROM t_discipline_record")
+    void clearDisciplines();
+
+    @Delete("DELETE FROM t_attendance_record")
+    void clearAttendances();
+
+    @Insert("INSERT INTO t_attendance_record (id, batch_id, registration_id, reg_no, name, room_id, room_no, "
+            + "seat_no, check_in_at, source, status, apply_reason, applied_by, applied_at, approver_code, "
+            + "approver_name, approved_at, approve_comment, operator, remark, "
+            + "create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{registrationId},#{regNo},#{name},#{roomId},#{roomNo},#{seatNo},"
+            + "#{checkInAt},#{source},#{status},#{applyReason},#{appliedBy},#{appliedAt},#{approverCode},"
+            + "#{approverName},#{approvedAt},#{approveComment},#{operator},#{remark},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAttendance(AttendanceRecord a);
+
+    @Insert("INSERT INTO t_discipline_record (id, batch_id, registration_id, reg_no, name, room_id, room_no, "
+            + "discipline_type, detail, occurred_at, score_void, status, revoke_reason, revoked_by, revoked_at, "
+            + "recorder, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{registrationId},#{regNo},#{name},#{roomId},#{roomNo},"
+            + "#{disciplineType},#{detail},#{occurredAt},#{scoreVoid},#{status},#{revokeReason},"
+            + "#{revokedBy},#{revokedAt},#{recorder},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertDiscipline(DisciplineRecord d);
+
+    @Insert("INSERT INTO t_absence_ruling (id, ruling_no, batch_id, registration_id, reg_no, name, absence_type, "
+            + "status, current_version, evidence_summary, score_validity, invalid_reason, invalid_reason_text, "
+            + "next_arrangement, next_arrangement_text, score_id, paper_score, grade, rule_version_no, qualified, "
+            + "initiator_code, initiator_name, first_reviewer_code, first_reviewer_name, first_reviewed_at, "
+            + "first_review_comment, second_reviewer_code, second_reviewer_name, second_reviewed_at, "
+            + "second_review_comment, notified_at, stats_dirty, stats_calculated_at, operator, remark, "
+            + "create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{rulingNo},#{batchId},#{registrationId},#{regNo},#{name},#{absenceType},"
+            + "#{status},#{currentVersion},#{evidenceSummary},#{scoreValidity},#{invalidReason},"
+            + "#{invalidReasonText},#{nextArrangement},#{nextArrangementText},#{scoreId},#{paperScore},"
+            + "#{grade},#{ruleVersionNo},#{qualified},#{initiatorCode},#{initiatorName},"
+            + "#{firstReviewerCode},#{firstReviewerName},#{firstReviewedAt},#{firstReviewComment},"
+            + "#{secondReviewerCode},#{secondReviewerName},#{secondReviewedAt},#{secondReviewComment},"
+            + "#{notifiedAt},#{statsDirty},#{statsCalculatedAt},#{operator},#{remark},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceRuling(AbsenceRuling r);
+
+    @Insert("INSERT INTO t_absence_ruling_version (id, ruling_id, version_no, absence_type, status, "
+            + "score_validity, invalid_reason, invalid_reason_text, next_arrangement, next_arrangement_text, "
+            + "score_id, paper_score, grade, rule_version_no, qualified, change_type, change_reason, operator, "
+            + "changed_at, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{rulingId},#{versionNo},#{absenceType},#{status},#{scoreValidity},#{invalidReason},"
+            + "#{invalidReasonText},#{nextArrangement},#{nextArrangementText},#{scoreId},#{paperScore},"
+            + "#{grade},#{ruleVersionNo},#{qualified},#{changeType},#{changeReason},#{operator},#{changedAt},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceRulingVersion(AbsenceRulingVersion v);
+
+    @Insert("INSERT INTO t_absence_ruling_trace (id, ruling_id, batch_id, trace_type, detail, operator, "
+            + "traced_at, create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{rulingId},#{batchId},#{traceType},#{detail},#{operator},#{tracedAt},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceTrace(AbsenceRulingTrace t);
+
+    @Insert("INSERT INTO t_absence_notification (id, batch_id, registration_id, reg_no, name, ruling_id, "
+            + "notify_type, title, content, status, operator, notified_at, read_at, "
+            + "create_by, create_time, update_by, update_time) VALUES "
+            + "(#{id},#{batchId},#{registrationId},#{regNo},#{name},#{rulingId},#{notifyType},"
+            + "#{title},#{content},#{status},#{operator},#{notifiedAt},#{readAt},"
+            + "#{createBy},#{createTime},#{updateBy},#{updateTime})")
+    void insertAbsenceNotification(AbsenceNotification n);
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_attendance_record")
+    long maxAttendanceId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_discipline_record")
+    long maxDisciplineId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_ruling")
+    long maxAbsenceRulingId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_ruling_version")
+    long maxAbsenceVersionId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_ruling_trace")
+    long maxAbsenceTraceId();
+
+    @Select("SELECT COALESCE(MAX(id),0) FROM t_absence_notification")
+    long maxAbsenceNotificationId();
+
+    @Update("ALTER TABLE t_attendance_record ALTER COLUMN id RESTART WITH ${value}")
+    void restartAttendance(@Param("value") long value);
+
+    @Update("ALTER TABLE t_discipline_record ALTER COLUMN id RESTART WITH ${value}")
+    void restartDiscipline(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_ruling ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceRuling(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_ruling_version ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceVersion(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_ruling_trace ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceTrace(@Param("value") long value);
+
+    @Update("ALTER TABLE t_absence_notification ALTER COLUMN id RESTART WITH ${value}")
+    void restartAbsenceNotification(@Param("value") long value);
 }

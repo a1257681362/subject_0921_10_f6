@@ -231,3 +231,45 @@
 - 历史既成事实：落库即 **CONFIRMED**（版本 IMPORT，单版生效），卷箱位置按纸面原样记录；异常时段同样自动标记并告警保卫。
 
 > 新表 `t_vault_person / t_vault_box / t_vault_access / t_vault_access_version / t_vault_box_move / t_vault_access_note / t_vault_alert / t_vault_config` 已纳入工作区快照与回退；schema 版本号 `vault-1`。
+
+## 缺考裁定与成绩快照工作区（absence-1）
+
+针对"同一个缺考两个窗口给出两种答复、学员投诉到主任"：evops-base 把缺考口径立成**一套裁定**——**按签到和违纪记录自动标缺考 → 双人复核 → 结论决定成绩有没有效 → 有效进合格名单、无效写明原因并衔接下次安排 → 结论通知本人 → 统计只认最终裁定、全过程留痕**。签到补录走审批；裁定所依据的签到/违纪一变，裁定自动重开、统计随之重算；**缺考（应到未到）与弃考（本人主动放弃）分清类型**。缺考裁定分**模块（主表）/ 版本（只追加）/ 状态（当前版本）**三段，与聘任、保密室登记同一套版本模式。
+
+### 28. 学员签到（现场生效；补录走审批）
+
+- `POST /api/absence/attendances/check-in`：`{batchId, regNo, checkInAt?(缺省当前), roomId?, remark?}` 现场签到，直接 **RECORDED 生效**计入到考口径；已有生效签到拒收（`ATTENDANCE_EXISTS`），防两个窗口重复登记。
+- `POST /api/absence/attendances/supplement`：补录申请 `{batchId, regNo, checkInAt, reason, roomId?}`，落 **PENDING_APPROVAL 待审批**，审批前不算到考；时间不能晚于当前；有待审批补录不能重复申请。
+- `POST /api/absence/attendances/{id}/approve`：`{approverCode, approverName?, approved, comment?}` 双人之外的审批关——批准置 **APPROVED** 才计入到考；驳回必须写意见置 **REJECTED**（可再次申请）；批准前再校一次，等待期间若已现场签到则不再批准。
+- `GET /api/absence/attendances?batchId=&status=`、`GET /api/absence/attendances/pending`、`GET /api/absence/attendances/{id}`。
+
+### 29. 考场违纪记录（只追加；作废情节联动裁定）
+
+- `POST /api/absence/disciplines`：`{batchId, regNo, disciplineType, detail, occurredAt?, roomId?, scoreVoid?}`，类型 `CHEAT 抄袭作弊 / ENTRY_LATE 迟到 / EARLY_LEAVE 擅离 / ID_ISSUE 证件 / OTHER`；`scoreVoid=true` 表示情节严重、**本场成绩作废**。
+- `POST /api/absence/disciplines/{id}/revoke`：撤销违纪（置 **REVOKED**、记原因与经办，记录不删），撤销后不再作为裁定依据。
+- `GET /api/absence/disciplines?batchId=&status=`、`GET /api/absence/disciplines/{id}`。
+
+### 30. 缺考裁定模块（自动标记 + 模块 / 版本 / 状态）
+
+- 自动口径（`EvidenceSupport` 全模块唯一事实来源）：**有生效签到=到考**；有效违纪中存在 `scoreVoid=true` 标记作废；未到考自动标 **ABSENT 缺考**，到考标 **NORMAL**；**WAIVED 弃考只能凭放弃证据人工改型**，自动判定不产生弃考。
+- `POST /api/absence/rulings/generate/preview` → `POST /api/absence/rulings/generate`：请求 `{batchId, regNos?[], rebuild?}`。预检逐条列自动标记、签到/违纪/成绩依据、可建单或跳过；执行建 **PENDING 待初审** 裁定（裁定号 `QK+批次编码+4位流水`，一人一批次一条）。已 **CONFIRMED** 不自动覆盖、**REVIEWING** 不重刷（防绕过初审）；PENDING/REJECTED 带 `rebuild=true` 才重开。
+- 状态机：**PENDING 待初审 → REVIEWING 待终审 → CONFIRMED 最终裁定生效**；初审可 **REJECTED**（驳回终止，改型或 rebuild 后重走）。每次流转追加一版 `t_absence_ruling_version`（AUTO/MANUAL/FIRST_REVIEW/SECOND_REVIEW/REJECT/REOPEN），主表只切当前版本号与状态；证据变化、补录审批、违纪变化、改型、通知、重算另写 `t_absence_ruling_trace` 过程留痕。
+- `POST /api/absence/rulings/{id}/reclassify`：`{absenceType, reason}` 缺考/弃考/正常改型，**缺考与弃考分清类型**；对已生效裁定改型一律**重开走新版本**（原结论与版本链保留），重新双人复核并再次通知、统计重算。
+- `GET /api/absence/rulings[?batchId=&status=&absenceType=&scoreValidity=]`、`GET /api/absence/rulings/{id}`、`GET /api/absence/rulings/{id}/versions`（版本链）、`GET /api/absence/rulings/{id}/traces`（过程留痕）。
+
+### 31. 双人复核 + 成绩快照 + 结论通知
+
+- `POST /api/absence/rulings/{id}/first-review`：`{reviewerCode, reviewerName?, approved, comment?}` 初审（复核第一人）。初审人不能是裁定发起人（`REVIEWER_SAME_AS_INITIATOR`）；通过置 **REVIEWING**，驳回必须写意见。
+- `POST /api/absence/rulings/{id}/final-review`：`{reviewerCode, scoreValidity, invalidReason?, invalidReasonText?, nextArrangement?, nextArrangementText?, comment?}` 终审（复核第二人，**不能与初审人同一人**，`REVIEWER_SAME_AS_FIRST`）。终审冻结**成绩快照**（分数/等级/规则版本号取自成绩行，规则升级不改历史口径），落最终结论并 **CONFIRMED 生效**：
+  - **VALID 有效** → 等级合格者进合格名单；缺考/弃考标记不允许判 VALID（`RULING_VALIDITY_CONFLICT`）。
+  - **INVALID 无效** → 必须写明原因（`NOT_CHECKED_IN 未签到 / DISCIPLINE_VOID 违纪作废 / WAIVED_EXAM 弃考 / OTHER`）并衔接下次安排（`NEXT_BATCH 顺延下次 / MAKEUP 补考 / REAPPLY 重新报名 / NONE 不安排`），原因与安排都可带文字说明。
+- 结论通知本人：终审生效发 `RULING_RESULT` 站内通知，重裁后再次终审批 `RULING_CHANGED`；`GET /api/absence/notifications?regNo=&unreadOnly=`、`POST /api/absence/notifications/{id}/read`（本版站内落库，外发渠道下版再接）。
+
+### 32. 合格名单与统计（只认最终裁定；变更即重算）
+
+- `GET /api/absence/rulings/pass-list?batchId=`：**合格名单**——只取最终裁定 VALID 且等级合格者，成绩口径取裁定冻结快照。
+- `GET /api/absence/rulings/stats?batchId=`：批次统计——名册总数、已裁/未裁、过程态（PENDING/REVIEWING/REJECTED 单列不进结论）、**最终裁定**的正常/缺考/弃考、有效/无效、合格人数与合格率、缺考率、无效原因与下次安排分布，以及待重算条数 `dirtyCount`。**统计只认 CONFIRMED 最终裁定**。
+- `POST /api/absence/rulings/stats/recalculate?batchId=`：裁定或依据变更后重算（补冻裁定时尚未录入的成绩快照、重算合格标记、清脏标记、逐条留痕）。
+- **变更联动**：签到生效/补录批准、违纪作废/撤销后，已生效裁定若到考口径翻转或出现作废违纪，**自动重开重裁**（重新双人复核+通知）；口径不变则置 `stats_dirty` 待重算；过程中裁定直接刷新工作标记并留痕。
+
+> 新表 `t_attendance_record / t_discipline_record / t_absence_ruling / t_absence_ruling_version / t_absence_ruling_trace / t_absence_notification` 已纳入工作区快照与回退；schema 版本号 `absence-1`。
